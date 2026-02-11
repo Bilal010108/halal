@@ -8,7 +8,7 @@ services:
       bash -c "./manage.py collectstatic --noinput && ./manage.py makemigrations && ./manage.py migrate && gunicorn -b 0.0.0.0:8000 apps.wsgi:application"
     volumes:
       - .:/app
-      - /home/ubuntu/HalalMarket/mysite/staticfiles:/app/static
+      - /home/ubuntu/HalalMarket/apss/staticfiles:/app/static
       - media_volume:/app/media
     ports:
       - "8000:8000"
