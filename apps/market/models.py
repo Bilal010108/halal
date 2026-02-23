@@ -1,10 +1,13 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.utils import timezone
 from  phonenumber_field.modelfields import PhoneNumberField
 from django.core.exceptions import ValidationError
-from django.db.models import Avg
+from django.db.models import Avg, Sum, F,DecimalField
 from decimal import Decimal
 from django.core.validators import MinValueValidator, MaxValueValidator
+import logging
+logger = logging.getLogger(__name__)
 
 
 class UserProfile(AbstractUser):
@@ -31,11 +34,6 @@ class Store(models.Model):
     def __str__(self):
         return self.store_name
 
-    def clean(self):
-        if Store.objects.filter(
-            store_owner=self.store_owner
-        ).exclude(pk=self.pk).exists():
-            raise ValidationError("Этот пользователь уже имеет магазин")
 
 
 class Category(models.Model):
@@ -62,10 +60,10 @@ class Product(models.Model):
     product_name = models.CharField(max_length=500,null=True,blank=True)
     country = models.CharField(max_length=100,null=True,blank=True)
     ingredients = models.TextField(null=True,blank=True)
-    price =  models.DecimalField(max_digits=8,decimal_places=2,default=0)
-    best_before_date = models.CharField(max_length=100,null=True,blank=True) #Срок годности
+    price =  models.DecimalField(max_digits=8,decimal_places=2,default=0,null=True,blank=True)
+    best_before_date = models.DateField(null=True,blank=True) #Срок годности
     action = models.CharField(max_length=100,null=True,blank=True)
-    quantity =  models.CharField(max_length=100,null=True,blank=True)
+    quantity =  models.PositiveIntegerField(null=True,blank=True)
     description = models.TextField(null=True,blank=True)
 
 
@@ -92,6 +90,18 @@ class Product(models.Model):
         good = self.review_product.filter(rating__gt=3).count()
         percent = round((good * 100) / total)
         return f'{percent}%'
+
+    def get_actual_price(self):
+        sale = self.sales.filter(
+            is_active=True,
+            start_date__lte=timezone.now(),
+            end_date__gte=timezone.now()
+        ).first()
+
+        if sale:
+            return sale.discounted_price
+
+        return self.price
 
 
 class Sale(models.Model):
@@ -133,31 +143,6 @@ class ProductImage(models.Model):
     def __str__(self):
         return self.product_image.name or self.product.product_name
 
-
-class Order(models.Model):
-    customer = models.ForeignKey(UserProfile, on_delete=models.CASCADE,related_name='customer_orders')
-    created_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=50, choices=[
-        ('pending', 'В ожидании'),
-        ('shipped', 'Отправлен'),
-        ('delivered', 'Доставлен'),
-        ('cancelled', 'Отменён')
-    ], default='pending')
-
-
-    def __str__(self):
-        return self.customer.username
-
-class OrderItem(models.Model):
-    order = models.ForeignKey(Order, related_name="items", on_delete=models.SET_NULL, null=True)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, null=True,related_name='product_items')
-    address = models.CharField(max_length=500)
-    quantity = models.PositiveIntegerField()
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    phone_number = models.CharField(max_length=100,null=True,blank=True)
-
-    def __str__(self):
-        return self.product.product_name
 
 class Review(models.Model):
     user = models.ForeignKey(UserProfile, on_delete=models.CASCADE,related_name='user_reviews')
@@ -238,12 +223,56 @@ class CartItem(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
 
+
+
     @property
     def total_price(self):
-        return self.product.price * self.quantity
+        return self.product.get_actual_price() * self.quantity
 
     def __str__(self):
         return f"{self.quantity} x {self.product.product_name}"
+
+
+class Order(models.Model):
+
+    STATUS_CHOICES = (
+        ('ожидании', 'ожидании'),
+        ('Отправлен', 'Отправлен'),
+        ('Доставлен', 'Доставлен'),
+        ('Отменён', 'Отменён'),
+
+    )
+
+    user = models.ForeignKey(UserProfile,on_delete=models.CASCADE,related_name='user_orders')
+    status = models.CharField(max_length=20,choices=STATUS_CHOICES,default='ожидании')
+    total_price = models.DecimalField(max_digits=10,decimal_places=2,default=Decimal('0.00'))
+    created_at = models.DateTimeField(auto_now_add=True)
+    phone_number = PhoneNumberField(null=True,blank=True)
+    address = models.CharField(max_length=500,null=True,blank=True)
+
+    def __str__(self):
+        return f'Order #{self.id} - {self.user.username}'
+
+    def calculate_total(self):
+        total = sum(item.total_price for item in self.items.all())
+        self.total_price = total
+        self.save(update_fields=['total_price'])
+
+
+
+class OrderItem(models.Model):
+
+    order = models.ForeignKey(Order,on_delete=models.CASCADE,related_name='items')
+    product = models.ForeignKey(Product,on_delete=models.PROTECT, related_name='order_items')
+    price = models.DecimalField(max_digits=10,decimal_places=2)
+    quantity = models.PositiveIntegerField()
+
+    @property
+    def total_price(self):
+        return self.price * self.quantity
+
+    def __str__(self):
+        return f'{self.product.product_name} x {self.quantity}'
 
 
 class SellerRequest(models.Model):
@@ -260,3 +289,5 @@ class SellerRequest(models.Model):
 
     def __str__(self):
         return f'{self.user.username} - {self.status}'
+
+

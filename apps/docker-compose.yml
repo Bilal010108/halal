@@ -5,21 +5,13 @@ services:
   web:
     build: .
     command: >
-      bash -c "./manage.py collectstatic --noinput && 
-      ./manage.py makemigrations && 
-      ./manage.py migrate && 
-      gunicorn -b 0.0.0.0:8000 apps.wsgi:application"
+      bash -c "./manage.py collectstatic --noinput && ./manage.py makemigrations && ./manage.py migrate && gunicorn -b 0.0.0.0:8000 apps.wsgi:application"
     volumes:
       - .:/app
-      - static_volume:/app/static
+      - /home/ubuntu/halal/apps/staticfiles:/app/static
       - media_volume:/app/media
     ports:
       - "8000:8000"
-    environment:
-      - POSTGRES_DB=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - DB_HOST=db
     depends_on:
       - db
 
@@ -38,12 +30,11 @@ services:
     ports:
       - "80:80"
     volumes:
-      - static_volume:/app/static
+      - /home/ubuntu/halal/apps/staticfiles:/app/static
       - media_volume:/app/media
     depends_on:
       - web
 
 volumes:
   postgres_data:
-  static_volume:
   media_volume:

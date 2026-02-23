@@ -1,6 +1,4 @@
 from rest_framework import routers
-from unicodedata import category
-
 from .views import *
 from django.urls import path, include
 
@@ -17,7 +15,7 @@ urlpatterns = [
     # Store
     path('stores/', StoreAPIView.as_view(), name='store-list'),
     path('stores/<int:pk>/', StoreDetailAPIView.as_view(), name='store-detail'),
-    path('stores_create/',StoreCreateAPIView.as_view(), name='store-create'),
+    # path('stores_create/',StoreCreateAPIView.as_view(), name='store-create'),
 
 
     #  Categories
@@ -39,9 +37,7 @@ urlpatterns = [
     path('sales/', SaleListAPIView.as_view(), name='sale-list'),
     path('sales/<int:pk>/', SaleDetailAPIView.as_view(), name='sale-detail'),
 
-    # Orders
-    path('orders/', OrderAPIView.as_view(), name='order-list'),
-    path('order-items/', OrderItemAPIView.as_view(), name='order-item-list'),
+
 
     # Reviews & Comments
     path('reviews/', ReviewListAPIView.as_view(), name='review-list'),
@@ -71,4 +67,22 @@ urlpatterns = [
     path('password_reset/', include('django_rest_passwordreset.urls', namespace='password_reset')),
     path('password_reset/verify_code/', verify_reset_code, name='verify_reset_code'),
 
+    path('analytics/monthly/', MonthlyAnalyticsView.as_view(), name='monthly-analytics'),
+
+    # Отдельные эндпоинты аналитики
+    path('analytics/orders-stats/', OrdersStatsView.as_view(), name='orders-stats'),
+    path('analytics/top-products/', TopProductsView.as_view(), name='top-products'),
+    path('analytics/top-sellers/', TopSellersView.as_view(), name='top-sellers'),
+
+    path('orders/create/', CreateOrderAPIView.as_view()),
+    path('orders/my/', UserOrderListAPIView.as_view()),
+
+    path('orders/seller/', SellerOrderListView.as_view()),
+    path('orders/seller/<int:pk>/', SellerOrderUpdateView.as_view()),
+
 ]
+
+
+
+
+

@@ -15,7 +15,7 @@ User = get_user_model()
 class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('username', 'email', 'phone_number', 'password')
+        fields = ('username', 'email', 'phone_number', 'password',)
         extra_kwargs = {
             'password': {'write_only': True},
             'username': {'required': True},
@@ -90,6 +90,7 @@ class CustomLoginSerializer(serializers.Serializer):
             'user': {
                 'username': user.username,
                 'email': user.email,
+                'user_role': user.user_role,
             },
             'access': str(refresh.access_token),
             'refresh': str(refresh),
@@ -142,20 +143,27 @@ class VerifyResetCodeSerializer(serializers.Serializer):
         # Удаляем использованный токен
         token.delete()
 
+
 class ClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ('id', 'username', 'email', 'first_name', 'last_name')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name','phone_number','user_role')
+
+
+class ClientSimpleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ('id','username',)
 
 class SellerSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ('id', 'username', 'email', 'first_name', 'last_name')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name','phone_number','user_role')
 
 class AdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ('id', 'username', 'email', 'first_name', 'last_name')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name','phone_number','user_role')
 
 class StoreCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -264,19 +272,26 @@ class StorSimpleSerializer(serializers.ModelSerializer):
         fields = ('id','store_name',)
 
 
+
+
+class SubCategory2SimpleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubCategory
+        fields = ('id','subcategory_name')
+
 class ProductListSerializers(serializers.ModelSerializer):
     store = StorSimpleSerializer(read_only=True)
     images  = ProductImageSerializer(many=True,read_only=True)
     avg_rating = serializers.ReadOnlyField()
     rating_count = serializers.SerializerMethodField()
     good_rate = serializers.ReadOnlyField()
-
+    product_subcategory = SubCategory2SimpleSerializer()
 
     class Meta:
         model = Product
-        fields = ('id','store','product_name','images','price','avg_rating','rating_count','good_rate',
+        fields = ('id','store','product_subcategory','product_name','images','price','avg_rating','rating_count','good_rate','product_subcategory'
 )
-    def get_rating_count(self, obj):
+    def get_rating_coфunt(self, obj):
         return obj.get_count_rating()
 
 
@@ -288,13 +303,17 @@ class ProductDetailSerializers(serializers.ModelSerializer):
     store = StorSimpleSerializer(read_only=True)
     avg_rating = serializers.ReadOnlyField()
     good_rate = serializers.ReadOnlyField()
+    product_subcategory = SubCategory2SimpleSerializer()
+    product_subcategory_id = serializers.PrimaryKeyRelatedField(queryset=SubCategory.objects.all(),source='product_subcategory',write_only=True)
+
+
 
 
 
 
     class Meta:
         model = Product
-        fields = ('id', 'store', 'product_name', 'images',
+        fields = ('id', 'store','product_subcategory','product_subcategory_id', 'product_name', 'images',
                   'price','country','ingredients',
                   'best_before_date','action','quantity','description','avg_rating','good_rate',
 )
@@ -333,22 +352,11 @@ class SaleSerializer(serializers.ModelSerializer):
         )
 
 
-class OrderItemSerializers(serializers.ModelSerializer):
-    product_items = ProductMiniSerializers(read_only=True)
 
-    class Meta:
-        model = OrderItem
-        fields = (
-            'id','product', 'address','quantity','price','phone_number','product_items'
-        )
 
-class OrderSerializers(serializers.ModelSerializer):
-    items = OrderItemSerializers(many=True, read_only=True)
-    customer_username = serializers.CharField(source='customer.username', read_only=True)
 
-    class Meta:
-        model = Order
-        fields = ('id','customer', 'customer_username','status','created_at','items',)
+
+
 
 class UserProfileReviewSerializers(serializers.ModelSerializer):
     class Meta:
@@ -453,12 +461,13 @@ class CartItemSerializer(serializers.ModelSerializer):
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
     total_price = serializers.ReadOnlyField()
+    user  = ClientSimpleSerializer(read_only=True)
+
 
     class Meta:
         model = Cart
         fields = (
-            'id','user','items','total_price',
-        )
+            'id','user','items','total_price',)
         read_only_fields = ('user',)
 
 class FavoriteProductSerializer(serializers.ModelSerializer):
@@ -513,3 +522,144 @@ class SellerRequestAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = SellerRequest
         fields = '__all__'
+
+
+
+
+class MonthlyOrderStatsSerializer(serializers.Serializer):
+    """Статистика заказов за месяц"""
+    total_orders = serializers.IntegerField(help_text="Общее количество заказов")
+    pending_orders = serializers.IntegerField(help_text="Заказы в ожидании")
+    shipped_orders = serializers.IntegerField(help_text="Отправленные заказы")
+    delivered_orders = serializers.IntegerField(help_text="Доставленные заказы")
+    cancelled_orders = serializers.IntegerField(help_text="Отмененные заказы")
+
+    # Процентные показатели
+    pending_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+    shipped_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+    delivered_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+    cancelled_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+
+
+class ProductSalesSerializer(serializers.Serializer):
+    """Проданные товары за месяц"""
+    product_id = serializers.IntegerField()
+    product_name = serializers.CharField()
+    store_name = serializers.CharField()
+    total_quantity = serializers.IntegerField(help_text="Количество проданных единиц")
+    total_revenue = serializers.DecimalField(max_digits=12, decimal_places=2, help_text="Общий доход")
+    orders_count = serializers.IntegerField(help_text="Количество заказов")
+
+
+class SellerStatsSerializer(serializers.Serializer):
+    """Статистика продавцов"""
+    active_sellers = serializers.IntegerField(help_text="Активные продавцы (имеющие продажи)")
+    new_sellers = serializers.IntegerField(help_text="Новые продавцы за месяц")
+    total_sellers = serializers.IntegerField(help_text="Всего продавцов")
+
+    active_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+    new_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+
+
+class MonthlySalesSerializer(serializers.Serializer):
+    """Общий показатель продаж за месяц"""
+    total_sales = serializers.DecimalField(max_digits=12, decimal_places=2, help_text="Общая сумма продаж")
+    total_orders = serializers.IntegerField(help_text="Количество заказов")
+    average_order_value = serializers.DecimalField(max_digits=10, decimal_places=2, help_text="Средний чек")
+
+    # Сравнение с предыдущим месяцем
+    previous_month_sales = serializers.DecimalField(max_digits=12, decimal_places=2)
+    sales_growth_percent = serializers.DecimalField(max_digits=6, decimal_places=2, help_text="Рост продаж в %")
+    sales_growth_amount = serializers.DecimalField(max_digits=12, decimal_places=2,
+                                                   help_text="Рост в денежном выражении")
+
+
+class ActiveStoresSerializer(serializers.Serializer):
+    """Активные магазины за месяц"""
+    active_stores = serializers.IntegerField(help_text="Магазины с продажами")
+    total_stores = serializers.IntegerField(help_text="Всего магазинов")
+    inactive_stores = serializers.IntegerField(help_text="Неактивные магазины")
+
+    active_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+    inactive_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+
+    # Детали по магазинам
+    stores_with_1_5_orders = serializers.IntegerField(help_text="Магазины с 1-5 заказами")
+    stores_with_6_20_orders = serializers.IntegerField(help_text="Магазины с 6-20 заказами")
+    stores_with_20_plus_orders = serializers.IntegerField(help_text="Магазины с 20+ заказами")
+
+
+class PopularCategorySerializer(serializers.Serializer):
+    """Популярные категории за месяц"""
+    category_id = serializers.IntegerField()
+    category_name = serializers.CharField()
+    total_sales = serializers.DecimalField(max_digits=12, decimal_places=2)
+    orders_count = serializers.IntegerField()
+    products_sold = serializers.IntegerField(help_text="Количество проданных товаров")
+
+    sales_percent = serializers.DecimalField(max_digits=5, decimal_places=2, help_text="% от общих продаж")
+    orders_percent = serializers.DecimalField(max_digits=5, decimal_places=2, help_text="% от общих заказов")
+
+
+class TopSellerSerializer(serializers.Serializer):
+    """Топ продавцы за месяц"""
+    seller_id = serializers.IntegerField()
+    seller_username = serializers.CharField()
+    store_name = serializers.CharField()
+    total_revenue = serializers.DecimalField(max_digits=12, decimal_places=2, help_text="Общий доход")
+    orders_count = serializers.IntegerField(help_text="Количество заказов")
+    products_sold = serializers.IntegerField(help_text="Товаров продано")
+    average_order_value = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+    revenue_percent = serializers.DecimalField(max_digits=5, decimal_places=2, help_text="% от общего дохода")
+
+
+class AnalyticsDashboardSerializer(serializers.Serializer):
+    """Общий дашборд аналитики"""
+    period_start = serializers.DateField()
+    period_end = serializers.DateField()
+
+    orders_stats = MonthlyOrderStatsSerializer()
+    sales_overview = MonthlySalesSerializer()
+    seller_stats = SellerStatsSerializer()
+    store_stats = ActiveStoresSerializer()
+
+    # Топы и списки
+    top_products = ProductSalesSerializer(many=True)
+    popular_categories = PopularCategorySerializer(many=True)
+    top_sellers = TopSellerSerializer(many=True)
+
+
+class SellerRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = SellerRequest
+        fields = ['id', 'phone_number', 'status', 'created_at']
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+
+
+
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(
+        source='product.product_name',
+        read_only=True
+    )
+
+    class Meta:
+        model = OrderItem
+        fields = (
+            'id','product','product_name','price','quantity','total_price',)
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Order
+        fields = (
+            'id', 'status','total_price','created_at','items','phone_number','address')
